@@ -9,6 +9,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .serializers import AdminLoginSerializer
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from .authentication import JWTAuthenticationFromCookie
 
 from management_service import settings
 
@@ -133,3 +134,12 @@ class AdminRefreshTokenView(APIView):
 
         except Exception:
             return Response({"detail": "Invalid or expired refresh token"}, status=status.HTTP_401_UNAUTHORIZED)
+
+class AdminMeView(APIView):
+    authentication_classes = [JWTAuthenticationFromCookie]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_superuser:
+            return Response({"detail": "Admin access only"}, status=403)
+        return Response({"email": request.user.email, "username": request.user.username})
