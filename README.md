@@ -12,6 +12,7 @@ The architecture is designed to prevent **XSS**, **CSRF**, and **token theft**, 
 - Protect against Cross-Site Request Forgery (CSRF)
 - Allow seamless login sessions without frequent re-authentication
 - Restrict access strictly to admin (superuser) accounts
+- Ensure **frontend can only communicate with trusted backend URLs**
 
 ---
 
@@ -67,7 +68,7 @@ The architecture is designed to prevent **XSS**, **CSRF**, and **token theft**, 
 - Django CSRF middleware is enabled
 - CSRF token is:
   - Generated on login & refresh
-  - Stored in frontend (localStorage)
+  - Stored in frontend (`localStorage`)
   - Sent in `X-CSRFToken` header for all requests
 - Ensures that **only same-site requests are accepted**
 
@@ -100,6 +101,13 @@ The architecture is designed to prevent **XSS**, **CSRF**, and **token theft**, 
 
 ---
 
+### 🔹 `GET /api/admin/check_auth/`
+- Uses **access token from HttpOnly cookie**
+- Validates JWT and superuser access
+- Returns user info for protected frontend routes
+
+---
+
 ## 🧠 Why a Refresh Token Endpoint Exists
 
 - Enables **short-lived access tokens** for security
@@ -111,31 +119,15 @@ The architecture is designed to prevent **XSS**, **CSRF**, and **token theft**, 
 
 ---
 
-## 🧰 Frontend Security (Axios)
-
-- `withCredentials: true` ensures cookies are sent
-- Request interceptor:
-  - Attaches CSRF token to every request
-- Response interceptor:
-  - Handles `401 Unauthorized`
-  - Automatically refreshes access token
-  - Retries failed requests
-  - Redirects to login on refresh failure
-
----
-
 ## ✅ Security Benefits Achieved
 
-✔ Protection against XSS  
-✔ Protection against CSRF  
-✔ Secure token storage  
-✔ Admin-only access enforcement  
-✔ Automatic token refresh  
-✔ Secure logout with token invalidation  
+✔ Protection against XSS
+✔ Protection against CSRF
+✔ Secure token storage
+✔ Admin-only access enforcement
+✔ Automatic token refresh
+✔ Secure logout with token invalidation
+✔ Protected frontend routes
+✔ Frontend communicates only with allowed backend URL
 
----
-
-## 📦 Summary
-This authentication architecture provides **strong security guarantees** while maintaining a **smooth admin experience**.  
-It mirrors the approach used by modern production systems and is suitable for **scalable, real-world applications**.
 
