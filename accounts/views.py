@@ -79,47 +79,39 @@ class AdminLogoutView(APIView):
     permission_classes = []
 
     def post(self, request):
-        try:
-            refresh_token = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME)
-            if not refresh_token:
-                return Response(
-                    {"detail": "Refresh token missing"},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+        # Get refresh token from cookie
+        refresh_token = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME)
 
-            token = RefreshToken(refresh_token)
-            user_id = token.payload.get('user_id')
-            user = User.objects.get(id=user_id)
+        if refresh_token:
+            try:
+                token = RefreshToken(refresh_token)
+                user_id = token.payload.get('user_id')
+                user = User.objects.get(id=user_id)
 
-            if not user.is_superuser:
-                return Response(
-                    {"detail": "Admin access only"},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+                if not user.is_superuser:
+                    return Response(
+                        {"detail": "Admin access only"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
 
-            token.blacklist()
+                # Blacklist refresh token
+                token.blacklist()
 
-            response = Response(
-                {"message": "Admin logged out successfully"},
-                status=status.HTTP_205_RESET_CONTENT
-            )
+            except (User.DoesNotExist, Exception):
+                # If refresh token is invalid, just proceed to clear cookies
+                pass
 
-            # Clear cookies
-            response.delete_cookie(settings.JWT_ACCESS_COOKIE_NAME)
-            response.delete_cookie(settings.JWT_REFRESH_COOKIE_NAME)
+        # Always clear cookies, even if tokens are invalid
+        response = Response(
+            {"message": "Admin logged out successfully"},
+            status=status.HTTP_205_RESET_CONTENT
+        )
 
-            return response
+        # Clear cookies
+        response.delete_cookie(settings.JWT_ACCESS_COOKIE_NAME)
+        response.delete_cookie(settings.JWT_REFRESH_COOKIE_NAME)
 
-        except User.DoesNotExist:
-            return Response(
-                {"detail": "Invalid user"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        except Exception:
-            return Response(
-                {"error": "Invalid or expired refresh token"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        return response
 
 class AdminRefreshTokenView(APIView):
     """
