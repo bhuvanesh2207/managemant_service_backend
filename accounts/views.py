@@ -75,44 +75,28 @@ class AdminLoginView(APIView):
 
 
 class AdminLogoutView(APIView):
-    authentication_classes = []
-    permission_classes = []
+    authentication_classes = []  # correct
+    permission_classes = []      # correct
 
     def post(self, request):
-        # Get refresh token from cookie
         refresh_token = request.COOKIES.get(settings.JWT_REFRESH_COOKIE_NAME)
 
         if refresh_token:
             try:
                 token = RefreshToken(refresh_token)
-                user_id = token.payload.get('user_id')
-                user = User.objects.get(id=user_id)
-
-                if not user.is_superuser:
-                    return Response(
-                        {"detail": "Admin access only"},
-                        status=status.HTTP_403_FORBIDDEN
-                    )
-
-                # Blacklist refresh token
                 token.blacklist()
+            except Exception:
+                pass  # token already invalid
 
-            except (User.DoesNotExist, Exception):
-                # If refresh token is invalid, just proceed to clear cookies
-                pass
-
-        # Always clear cookies, even if tokens are invalid
         response = Response(
             {"message": "Admin logged out successfully"},
             status=status.HTTP_205_RESET_CONTENT
         )
 
-        # Clear cookies
         response.delete_cookie(settings.JWT_ACCESS_COOKIE_NAME)
         response.delete_cookie(settings.JWT_REFRESH_COOKIE_NAME)
 
         return response
-
 class AdminRefreshTokenView(APIView):
     """
     Refresh access token using HttpOnly refresh token cookie
