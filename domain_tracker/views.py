@@ -2,7 +2,7 @@ from rest_framework.decorators import api_view, permission_classes, authenticati
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from accounts.authentication import JWTAuthenticationFromCookie
 from django.shortcuts import get_object_or_404
 from .models import Domain, DomainHistory
 from .serializers import (
@@ -15,9 +15,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# ---------------- CREATE DOMAIN ----------------
 @api_view(['POST'])
-@authentication_classes([JWTAuthentication])
+@authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def add_domain(request):
     serializer = DomainCreateSerializer(data=request.data)
@@ -34,9 +33,8 @@ def add_domain(request):
     )
 
 
-# ---------------- LIST DOMAINS ----------------
 @api_view(['GET'])
-@authentication_classes([JWTAuthentication])
+@authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def list_domains(request):
     domains = Domain.objects.all().order_by('-id')
@@ -47,9 +45,8 @@ def list_domains(request):
     )
 
 
-# ---------------- GET DOMAIN ----------------
 @api_view(['GET'])
-@authentication_classes([JWTAuthentication])
+@authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def get_domain(request, domain_id):
     domain = get_object_or_404(Domain, pk=domain_id)
@@ -57,9 +54,8 @@ def get_domain(request, domain_id):
     return Response(serializer.data, status=status.HTTP_200_OK)
 
 
-# ---------------- UPDATE DOMAIN ----------------
 @api_view(['PATCH'])
-@authentication_classes([JWTAuthentication])
+@authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def update_domain(request, domain_id):
     domain = get_object_or_404(Domain, pk=domain_id)
@@ -92,9 +88,8 @@ def update_domain(request, domain_id):
     )
 
 
-# ---------------- DELETE DOMAIN ----------------
 @api_view(['DELETE'])
-@authentication_classes([JWTAuthentication])
+@authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def delete_domain(request, domain_id):
     domain = get_object_or_404(Domain, pk=domain_id)
@@ -104,9 +99,8 @@ def delete_domain(request, domain_id):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# ---------------- DOMAIN HISTORY ----------------
 @api_view(['GET'])
-@authentication_classes([JWTAuthentication])
+@authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def get_domain_history(request, domain_id=None):
     qs = DomainHistory.objects.all()

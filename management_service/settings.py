@@ -39,13 +39,14 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
 
     # Third-party apps
-    'rest_framework',           # ✅ DRF
-    'rest_framework_simplejwt', # ✅ JWT support
-    'corsheaders',              # ✅ CORS for React frontend
+    'rest_framework',           
+    'rest_framework_simplejwt', 
+    'corsheaders',              
 
     # Local apps
     'accounts',    
     'domain_tracker',
+    'client',
 ]
 
 MIDDLEWARE = [

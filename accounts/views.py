@@ -11,7 +11,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from .authentication import JWTAuthenticationFromCookie
 
-from management_service import settings
+from django.conf import settings
+
 
 class AdminLoginView(APIView):
     authentication_classes = []
