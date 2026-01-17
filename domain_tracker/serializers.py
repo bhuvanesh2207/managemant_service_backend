@@ -40,7 +40,11 @@ class DomainCreateSerializer(serializers.ModelSerializer):
 
 
 class DomainUpdateSerializer(serializers.ModelSerializer):
-    changes_message = serializers.CharField(write_only=True)
+    changes_message = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True
+    )
 
     class Meta:
         model = Domain
@@ -52,10 +56,62 @@ class DomainUpdateSerializer(serializers.ModelSerializer):
             "changes_message"
         ]
 
+    def validate(self, attrs):
+        purchase = attrs.get("purchase_date", self.instance.purchase_date)
+        expiry = attrs.get("expiry_date", self.instance.expiry_date)
+
+        if purchase and expiry and expiry <= purchase:
+            raise serializers.ValidationError(
+                {"expiry_date": "Expiry date must be after purchase date"}
+            )
+
+        ssh_name = attrs.get("ssh_name", self.instance.ssh_name)
+        if ssh_name:
+            ssh_purchase = attrs.get("ssh_purchase_date", self.instance.ssh_purchase_date)
+            ssh_expiry = attrs.get("ssh_expiry_date", self.instance.ssh_expiry_date)
+            if not ssh_purchase or not ssh_expiry:
+                raise serializers.ValidationError(
+                    "SSH dates are required when SSH is provided"
+                )
+            if ssh_expiry <= ssh_purchase:
+                raise serializers.ValidationError(
+                    "SSH expiry must be after SSH purchase date"
+                )
+
+        hosting_name = attrs.get("hosting_name", self.instance.hosting_name)
+        if hosting_name:
+            hosting_purchase = attrs.get(
+                "hosting_purchase_date", self.instance.hosting_purchase_date
+            )
+            hosting_expiry = attrs.get(
+                "hosting_expiry_date", self.instance.hosting_expiry_date
+            )
+            if not hosting_purchase or not hosting_expiry:
+                raise serializers.ValidationError(
+                    "Hosting dates are required when hosting is provided"
+                )
+            if hosting_expiry <= hosting_purchase:
+                raise serializers.ValidationError(
+                    "Hosting expiry must be after hosting purchase date"
+                )
+
+        return attrs
+
+
+class DomainMiniSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Domain
+        fields = ["id", "domain_name", "registrar"]
 
 class DomainHistorySerializer(serializers.ModelSerializer):
-    domain_name = serializers.CharField(source="domain.domain_name", read_only=True)
+    domain = DomainMiniSerializer(read_only=True)
 
     class Meta:
         model = DomainHistory
-        fields = ["id", "domain", "domain_name", "changes", "updated_at", "updated_by"]
+        fields = [
+            "id",
+            "domain",
+            "changes",
+            "updated_at",
+            "updated_by",
+        ]
