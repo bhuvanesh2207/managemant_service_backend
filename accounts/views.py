@@ -100,10 +100,8 @@ class AdminLogoutView(APIView):
 
         return response
 class AdminRefreshTokenView(APIView):
-    """
-    Refresh access token using HttpOnly refresh token cookie
-    """
-    authentication_classes = [JWTAuthentication]  # Optional
+
+    authentication_classes = []  # No authentication needed for refresh
     permission_classes = []
 
     def post(self, request):

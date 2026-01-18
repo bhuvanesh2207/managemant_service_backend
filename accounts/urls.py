@@ -6,4 +6,5 @@ urlpatterns = [
     path('refresh/', AdminRefreshTokenView.as_view(), name='admin-refresh'),
     path('logout/', AdminLogoutView.as_view(), name='admin-logout'),
     path('check_auth/', AdminMeView.as_view(), name='admin-me'),
+    
 ]
