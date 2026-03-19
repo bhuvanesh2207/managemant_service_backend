@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from accounts.authentication import JWTAuthenticationFromCookie
 from django.shortcuts import get_object_or_404
+from django.core.management import call_command
 from .models import Domain, DomainHistory
 from .serializers import (
     DomainSerializer,
@@ -14,6 +15,7 @@ from .serializers import (
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 @api_view(['POST'])
 @authentication_classes([JWTAuthenticationFromCookie])
@@ -93,9 +95,10 @@ def update_domain(request, domain_id):
 @permission_classes([IsAuthenticated])
 def delete_domain(request, domain_id):
     domain = get_object_or_404(Domain, pk=domain_id)
+    domain_name = domain.domain_name  # capture before delete
     domain.delete()
 
-    logger.info(f"Domain deleted: {domain.domain_name} by {request.user}")
+    logger.info(f"Domain deleted: {domain_name} by {request.user}")
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -116,3 +119,21 @@ def get_domain_history(request, domain_id=None):
         {"success": True, "history": serializer.data},
         status=status.HTTP_200_OK
     )
+
+
+@api_view(['POST'])
+@authentication_classes([JWTAuthenticationFromCookie])
+@permission_classes([IsAuthenticated])
+def run_expiry_check(request):
+    try:
+        call_command("check_expiry")
+        return Response(
+            {"success": True, "message": "Expiry check completed"},
+            status=status.HTTP_200_OK
+        )
+    except Exception as e:
+        logger.error(f"Expiry check failed: {e}")
+        return Response(
+            {"success": False, "error": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )

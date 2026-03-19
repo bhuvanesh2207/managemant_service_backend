@@ -12,4 +12,7 @@ urlpatterns = [
     # -------- Domain History --------
     path("history/all/", views.get_domain_history, name="domain-history-all"),
     path("history/<int:domain_id>/", views.get_domain_history, name="domain-history-single"),
+
+    # -------- Expiry Check --------
+    path("expiry/check/", views.run_expiry_check, name="domain-expiry-check"),
 ]
