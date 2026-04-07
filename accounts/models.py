@@ -24,3 +24,17 @@ class PasswordResetOTP(models.Model):
 
     def __str__(self):
         return f"{self.email} — expires {self.expires_at} | verified={self.is_verified}"    
+    
+class EmailConfig(models.Model):
+    email_host      = models.CharField(max_length=255, default='smtp.gmail.com')
+    email_port      = models.IntegerField(default=587)
+    email_use_tls   = models.BooleanField(default=True)
+    email_host_user = models.EmailField()
+    email_host_password = models.CharField(max_length=255)
+    updated_at      = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Email Configuration"
+
+    def __str__(self):
+        return f"Email Config ({self.email_host_user})"

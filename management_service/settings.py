@@ -38,15 +38,18 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    # Third-party apps
-    'rest_framework',           
-    'rest_framework_simplejwt', 
-    'corsheaders',              
+    # Third-party
+    'rest_framework',
+    'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    'corsheaders',
 
-    # Local apps
-    'accounts',    
+    # Local
+    'accounts',
     'domain_tracker',
     'client',
+    'employee',
+    'attendance',
 ]
 
 MIDDLEWARE = [
@@ -129,20 +132,18 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Kolkata'
 
 USE_I18N = True
 
 USE_TZ = True
 
 
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
 
 # Email configuration
-EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'  # ConsoleEmailBackend for local testing
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
 EMAIL_USE_TLS = True
@@ -150,18 +151,17 @@ EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'noreply@domaintracker.com')
 
-# Local development: print emails to console instead of sending
 if DEBUG:
     EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',  # JWT for API
-        'rest_framework.authentication.SessionAuthentication',         # CSRF-safe for browser
+        'rest_framework_simplejwt.authentication.JWTAuthentication', 
+        'rest_framework.authentication.SessionAuthentication',       
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated',                  # Require login by default
+        'rest_framework.permissions.IsAuthenticated',               
     ),
 }
 
@@ -170,22 +170,21 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",]
 
 
-# Access token
+# settings.py
+
 JWT_ACCESS_COOKIE_NAME = "access"
-JWT_ACCESS_COOKIE_MAX_AGE = 3600          # 1 hour
-JWT_ACCESS_COOKIE_SECURE = False          # Set True in production with HTTPS
-JWT_ACCESS_COOKIE_SAMESITE = None         # Use "Lax" in production
+JWT_ACCESS_COOKIE_MAX_AGE = 3600
+JWT_ACCESS_COOKIE_SECURE = False     
+JWT_ACCESS_COOKIE_SAMESITE = "Lax"   
 
-# Refresh token
 JWT_REFRESH_COOKIE_NAME = "refresh"
-JWT_REFRESH_COOKIE_MAX_AGE = 7 * 24 * 3600   # 7 days
-JWT_REFRESH_COOKIE_SECURE = False            # Set True in production
-JWT_REFRESH_COOKIE_SAMESITE = None           # Use "Lax" in production
-
+JWT_REFRESH_COOKIE_MAX_AGE = 7 * 24 * 3600
+JWT_REFRESH_COOKIE_SECURE = False
+JWT_REFRESH_COOKIE_SAMESITE = "Lax"
 
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = 'smtp.gmail.com'
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'bhuvaneshb546@gmail.com'
-EMAIL_HOST_PASSWORD = 'dvvg ...... abga'
+EMAIL_HOST_PASSWORD = 'dvvg dxlg mhso abga'

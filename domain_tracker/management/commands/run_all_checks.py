@@ -7,5 +7,5 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         call_command('check_expiry')
-
+       
         self.stdout.write("\n All checks completed")
