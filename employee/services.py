@@ -22,6 +22,7 @@ def send_welcome_email(employee, temp_password=None):
                 f"Your employee account has been created.\n\n"
                 f"Login Email:    {employee.email}\n"
                 f"Temp Password:  {temp_password}\n\n"
+                f"URL: https://dummy.com/login\n\n"
                 f"Please log in and change your password immediately.\n\n"
                 f"Regards,\nHR Team"
             )

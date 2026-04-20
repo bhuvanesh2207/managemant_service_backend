@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'client',
     'employee',
     'attendance',
+    'salary',
 ]
 
 MIDDLEWARE = [
@@ -188,3 +189,8 @@ EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 EMAIL_HOST_USER = 'bhuvaneshb546@gmail.com'
 EMAIL_HOST_PASSWORD = 'dvvg dxlg mhso abga'
+
+
+OFFICE_LATITUDE      = float(os.getenv('OFFICE_LATITUDE', 0.0))
+OFFICE_LONGITUDE     = float(os.getenv('OFFICE_LONGITUDE', 0.0))
+OFFICE_RADIUS_METERS = int(os.getenv('OFFICE_RADIUS_METERS', 200))

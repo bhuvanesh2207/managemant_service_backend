@@ -35,7 +35,6 @@ def _generate_otp():
     return "".join(random.choices(string.digits, k=OTP_LENGTH))
 
 
-# ✅ BLACKLIST ALL TOKENS (IMPORTANT)
 def blacklist_user_tokens(user):
     try:
         tokens = OutstandingToken.objects.filter(user=user)
@@ -98,8 +97,8 @@ class LoginView(APIView):
 
         if employee is not None:
             response_data["employee_id"] = employee.employee_id
-            if employee.is_temp_password:
-                response_data["force_password_change"] = True
+            # ✅ Always include force_password_change for employees
+            response_data["force_password_change"] = employee.is_temp_password
 
         response = Response(response_data)
 
@@ -129,7 +128,6 @@ class AdminLogoutView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        # ✅ Logout from ALL devices
         blacklist_user_tokens(request.user)
 
         response = Response(
@@ -155,15 +153,11 @@ class AdminRefreshTokenView(APIView):
 
         try:
             old_token = RefreshToken(refresh_token)
-
-            # ✅ Blacklist old token BEFORE generating new one
             old_token.blacklist()
 
-            # ✅ Get user from token's payload, not .user attribute
             user_id = old_token["user_id"]
             user = User.objects.get(id=user_id)
 
-            # ✅ Generate fresh token pair
             new_token = RefreshToken.for_user(user)
             access = str(new_token.access_token)
             csrf_token = csrf.get_token(request)
@@ -195,9 +189,10 @@ class AdminRefreshTokenView(APIView):
 
         except User.DoesNotExist:
             return Response({"detail": "User not found"}, status=401)
-        except Exception as e:
+        except Exception:
             return Response({"detail": "Invalid or expired refresh token"}, status=401)
-        
+
+
 class CheckAuthView(APIView):
     authentication_classes = [JWTAuthenticationFromCookie]
     permission_classes = [IsAuthenticated]
@@ -211,12 +206,14 @@ class CheckAuthView(APIView):
 
         if request.user.is_superuser:
             data["role"] = "admin"
+            data["force_password_change"] = False  # ✅ admins never have temp passwords
         else:
             try:
                 employee = request.user.employee_profile
                 data["role"] = "employee"
                 data["employee_id"] = employee.employee_id
                 data["employee_name"] = employee.full_name
+                data["force_password_change"] = employee.is_temp_password  # ✅ key fix
             except Employee.DoesNotExist:
                 return Response(
                     {"detail": "Employee account not linked. Contact administrator."},
@@ -227,7 +224,60 @@ class CheckAuthView(APIView):
 
 
 # ═════════════════════════════════════════════════════════════
-# FORGOT PASSWORD (UNCHANGED - ALREADY GOOD)
+# CHANGE PASSWORD
+# ═════════════════════════════════════════════════════════════
+
+class EmployeeChangePasswordView(APIView):
+    authentication_classes = [JWTAuthenticationFromCookie]
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        new_password     = request.data.get("new_password", "")
+        confirm_password = request.data.get("confirm_password", "")
+        current_password = request.data.get("current_password", "")
+
+        if not new_password or not confirm_password:
+            return Response({"detail": "Both fields are required."}, status=400)
+
+        if len(new_password) < 6:
+            return Response({"detail": "Password must be at least 6 characters."}, status=400)
+
+        if new_password != confirm_password:
+            return Response({"detail": "Passwords do not match."}, status=400)
+
+        user = request.user
+
+        # ─── Determine if this is a temp password flow ───────────────────
+        is_temp_password_flow = False
+        try:
+            employee = user.employee_profile
+            is_temp_password_flow = employee.is_temp_password
+        except Employee.DoesNotExist:
+            pass  # admin — not a temp password flow
+
+        # ─── Validate current password only for non-temp flows ───────────
+        if not is_temp_password_flow:
+            if not current_password:
+                return Response({"detail": "Current password is required."}, status=400)
+            if not user.check_password(current_password):
+                return Response({"detail": "Current password is incorrect."}, status=400)
+
+        # ─── Apply new password ──────────────────────────────────────────
+        user.set_password(new_password)
+        user.save()
+
+        # ─── Clear temp password flag ────────────────────────────────────
+        try:
+            employee = user.employee_profile
+            employee.is_temp_password = False
+            employee.save(update_fields=["is_temp_password"])
+        except Employee.DoesNotExist:
+            pass
+
+        return Response({"detail": "Password updated successfully."}, status=200)
+    
+# ═════════════════════════════════════════════════════════════
+# FORGOT PASSWORD
 # ═════════════════════════════════════════════════════════════
 
 class ForgotPasswordSendOTPView(APIView):
@@ -309,8 +359,8 @@ class ForgotPasswordResetView(APIView):
     permission_classes = []
 
     def post(self, request):
-        email = request.data.get("email", "").strip().lower()
-        otp = request.data.get("otp", "").strip()
+        email        = request.data.get("email", "").strip().lower()
+        otp          = request.data.get("otp", "").strip()
         new_password = request.data.get("new_password", "")
 
         if not email or not otp or not new_password:
@@ -338,19 +388,37 @@ class ForgotPasswordResetView(APIView):
         record.delete()
 
         return Response({"message": "Password reset successful"}, status=200)
-    
+
+
+# ═════════════════════════════════════════════════════════════
+# EMAIL CONFIG
+# ═════════════════════════════════════════════════════════════
+
 from .models import EmailConfig
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from rest_framework.response import Response
-from rest_framework import status
-from .authentication import JWTAuthenticationFromCookie
+
+
+@api_view(['GET'])
+@authentication_classes([JWTAuthenticationFromCookie])
+@permission_classes([IsAuthenticated])
+def get_email_config(request):
+    try:
+        config = EmailConfig.objects.latest('updated_at')
+        return Response({
+            "email_host":      config.email_host,
+            "email_port":      config.email_port,
+            "email_use_tls":   config.email_use_tls,
+            "email_host_user": config.email_host_user,
+            "password_set":    bool(config.email_host_password),
+        })
+    except EmailConfig.DoesNotExist:
+        return Response({"detail": "No config found"}, status=404)
 
 
 @api_view(['POST'])
 @authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def save_email_config(request):
-    """Frontend sends email credentials here to save to DB."""
     data = request.data
 
     required = ['email_host_user', 'email_host_password']
@@ -359,7 +427,6 @@ def save_email_config(request):
             return Response({"error": f"{field} is required"}, status=400)
 
     config, created = EmailConfig.objects.update_or_create(
-        # singleton: always update the first/only row
         id=1,
         defaults={
             'email_host':          data.get('email_host', 'smtp.gmail.com'),
@@ -375,22 +442,3 @@ def save_email_config(request):
         "message": "Email configuration saved.",
         "created": created
     }, status=201 if created else 200)
-
-
-@api_view(['GET'])
-@authentication_classes([JWTAuthenticationFromCookie])
-@permission_classes([IsAuthenticated])
-def get_email_config(request):
-    """Return current config (hide password)."""
-    try:
-        config = EmailConfig.objects.latest('updated_at')
-        return Response({
-            "email_host":      config.email_host,
-            "email_port":      config.email_port,
-            "email_use_tls":   config.email_use_tls,
-            "email_host_user": config.email_host_user,
-            "password_set":    bool(config.email_host_password),  # never expose password
-        })
-    except EmailConfig.DoesNotExist:
-        return Response({"detail": "No config found"}, status=404) 
-    

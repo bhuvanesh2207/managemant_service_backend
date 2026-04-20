@@ -9,10 +9,11 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, authentication_classes, action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
 
+from .permissions import IsAdminOrOwner
 from accounts.authentication import JWTAuthenticationFromCookie
-
 from .models import Employee, WorkShift, EmployeeShift
 from .serializers import (
     EmployeeSerializer,
@@ -25,6 +26,64 @@ from .serializers import (
 logger = logging.getLogger(__name__)
 
 
+def _resolve_employee_for_request(request, employee_id):
+    try:
+        employee = Employee.objects.get(employee_id=employee_id)
+    except Employee.DoesNotExist:
+        raise Http404
+
+    if request.user.is_superuser:
+        return employee
+
+    try:
+        request.user.employee_profile
+    except Employee.DoesNotExist:
+        return Response(
+            {"detail": "Employee account not linked. Contact administrator."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    permission = IsAdminOrOwner()
+    if not permission.has_object_permission(request, None, employee):
+        raise Http404
+
+    return employee
+
+
+# ─────────────────────────────────────────
+# 🔹 EMPLOYEE SELF-PROFILE (GET only)
+# ─────────────────────────────────────────
+class EmployeeProfileView(APIView):
+    authentication_classes = [JWTAuthenticationFromCookie]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        try:
+            emp = request.user.employee_profile
+        except Employee.DoesNotExist:
+            return Response(
+                {"detail": "Employee account not linked. Contact administrator."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        photo_url = None
+        if emp.photo:
+            photo_url = request.build_absolute_uri(emp.photo.url)
+
+        return Response({
+            "employee_id": emp.employee_id,
+            "full_name":   emp.full_name,
+            "email":       request.user.email,
+            "phone":       emp.primary_contact_no,   # ✅ fixed
+            "address":     emp.current_address,       # ✅ fixed
+            "department":  getattr(emp, "department", None),
+            "designation": emp.designation,
+            "join_date":   emp.date_of_joining,       # ✅ fixed
+            "account_no":  emp.account_number,        # ✅ fixed
+            "photo":       photo_url,
+        })
+
+
 # ─────────────────────────────────────────
 # 🔹 CREATE EMPLOYEE
 # ─────────────────────────────────────────
@@ -32,6 +91,12 @@ logger = logging.getLogger(__name__)
 @authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def add_employee(request):
+    if not request.user.is_superuser:
+        return Response(
+            {"detail": "Only admins can create employees."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
     serializer = EmployeeCreateSerializer(data=request.data)
     if serializer.is_valid():
         employee = serializer.save()
@@ -53,20 +118,38 @@ def add_employee(request):
 @authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def list_employees(request):
-    if request.user.is_superuser:
-        employees = Employee.objects.all().order_by('-id')
-    else:
-        try:
-            employees = Employee.objects.filter(pk=request.user.employee_profile.pk)
-        except Employee.DoesNotExist:
-            return Response(
-                {"detail": "Employee account not linked. Contact administrator."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+    if not request.user.is_superuser:
+        return Response(
+            {"detail": "Only admins can list all employees."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
 
+    employees = Employee.objects.all().order_by('-id')
     serializer = EmployeeSerializer(employees, many=True)
     return Response(
         {"success": True, "employees": serializer.data},
+        status=status.HTTP_200_OK,
+    )
+
+
+# ─────────────────────────────────────────
+# 🔹 GET MY EMPLOYEE PROFILE (legacy)
+# ─────────────────────────────────────────
+@api_view(['GET'])
+@authentication_classes([JWTAuthenticationFromCookie])
+@permission_classes([IsAuthenticated])
+def get_my_employee(request):
+    try:
+        employee = request.user.employee_profile
+    except Employee.DoesNotExist:
+        return Response(
+            {"detail": "Employee account not linked. Contact administrator."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    serializer = EmployeeSerializer(employee)
+    return Response(
+        {"success": True, "employee": serializer.data},
         status=status.HTTP_200_OK,
     )
 
@@ -78,23 +161,9 @@ def list_employees(request):
 @authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def get_employee(request, employee_id):
-    try:
-        employee = Employee.objects.get(employee_id=employee_id)
-    except Employee.DoesNotExist:
-        employee = get_object_or_404(Employee, pk=employee_id)
-
-    if not request.user.is_superuser:
-        try:
-            if employee != request.user.employee_profile:
-                return Response(
-                    {"detail": "Employee not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        except Employee.DoesNotExist:
-            return Response(
-                {"detail": "Employee account not linked. Contact administrator."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+    employee = _resolve_employee_for_request(request, employee_id)
+    if isinstance(employee, Response):
+        return employee
 
     serializer = EmployeeSerializer(employee)
     return Response(
@@ -110,23 +179,9 @@ def get_employee(request, employee_id):
 @authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def update_employee(request, employee_id):
-    try:
-        employee = Employee.objects.get(employee_id=employee_id)
-    except Employee.DoesNotExist:
-        employee = get_object_or_404(Employee, pk=employee_id)
-
-    if not request.user.is_superuser:
-        try:
-            if employee != request.user.employee_profile:
-                return Response(
-                    {"detail": "Employee not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        except Employee.DoesNotExist:
-            return Response(
-                {"detail": "Employee account not linked. Contact administrator."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+    employee = _resolve_employee_for_request(request, employee_id)
+    if isinstance(employee, Response):
+        return employee
 
     serializer = EmployeeUpdateSerializer(employee, data=request.data, partial=True)
     if serializer.is_valid():
@@ -149,23 +204,9 @@ def update_employee(request, employee_id):
 @authentication_classes([JWTAuthenticationFromCookie])
 @permission_classes([IsAuthenticated])
 def delete_employee(request, employee_id):
-    try:
-        employee = Employee.objects.get(employee_id=employee_id)
-    except Employee.DoesNotExist:
-        employee = get_object_or_404(Employee, pk=employee_id)
-
-    if not request.user.is_superuser:
-        try:
-            if employee != request.user.employee_profile:
-                return Response(
-                    {"detail": "Employee not found."},
-                    status=status.HTTP_404_NOT_FOUND,
-                )
-        except Employee.DoesNotExist:
-            return Response(
-                {"detail": "Employee account not linked. Contact administrator."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+    employee = _resolve_employee_for_request(request, employee_id)
+    if isinstance(employee, Response):
+        return employee
 
     employee.status = 'inactive'
     employee.save()
@@ -207,9 +248,6 @@ class EmployeeShiftViewSet(ModelViewSet):
             queryset = queryset.filter(employee__employee_id=employee_id)
         return queryset
 
-    # ─────────────────────────────────────────
-    # 🔹 BULK ASSIGN — updates if already assigned
-    # ─────────────────────────────────────────
     @action(detail=False, methods=['post'], url_path='assign_bulk')
     def assign_bulk(self, request):
         shift_id     = request.data.get("shift")
@@ -227,21 +265,11 @@ class EmployeeShiftViewSet(ModelViewSet):
         for emp_id in employee_ids:
             try:
                 employee = Employee.objects.get(employee_id=emp_id)
-
-                # ✅ update_or_create: replaces old shift instead of adding a new row
                 obj, created = EmployeeShift.objects.update_or_create(
                     employee=employee,
-                    defaults={
-                        "shift_id": shift_id,
-                        "start_date": start_date,
-                    },
+                    defaults={"shift_id": shift_id, "start_date": start_date},
                 )
-
-                if created:
-                    created_list.append(obj.id)
-                else:
-                    updated_list.append(obj.id)
-
+                (created_list if created else updated_list).append(obj.id)
             except Employee.DoesNotExist:
                 not_found.append(str(emp_id))
                 logger.warning(f"Employee '{emp_id}' not found during bulk shift assign.")
@@ -267,9 +295,6 @@ class EmployeeShiftViewSet(ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
-    # ─────────────────────────────────────────
-    # 🔹 SINGLE ASSIGN — updates if already assigned
-    # ─────────────────────────────────────────
     @action(detail=False, methods=['post'], url_path='assign')
     def assign(self, request):
         emp_id     = request.data.get("employee_id")
@@ -291,14 +316,9 @@ class EmployeeShiftViewSet(ModelViewSet):
             )
 
         shift = get_object_or_404(WorkShift, pk=shift_id)
-
-        # ✅ update_or_create: replaces old shift instead of adding a new row
         obj, created = EmployeeShift.objects.update_or_create(
             employee=employee,
-            defaults={
-                "shift": shift,
-                "start_date": start_date,
-            },
+            defaults={"shift": shift, "start_date": start_date},
         )
 
         logger.info(
