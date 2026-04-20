@@ -23,5 +23,6 @@ urlpatterns = [
     path('api/domain/', include('domain_tracker.urls')),
     path("api/client/", include("client.urls")),
     path('api/employees/', include('employee.urls')),
-    path('api/attendance/', include('attendance.urls')),    
+    path('api/attendance/', include('attendance.urls')),
+    path('salary/', include('salary.urls')),   
 ]
