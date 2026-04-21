@@ -1,11 +1,13 @@
 from datetime import datetime
 from decimal import Decimal
 from django.db.models import Sum
+from django.utils import timezone
+
 from attendance.models import DailyAttendance, EmployeePermission, Leave
 
 
 def calculate_salary(employee, month, year):
-    # 🔹 Fetch data
+
     attendances = DailyAttendance.objects.filter(
         employee=employee,
         date__month=month,
@@ -27,12 +29,11 @@ def calculate_salary(employee, month, year):
         leave_type='CASUAL'
     )
 
-    # 🔹 Salary base
+    # 🔹 Base salary
     base_salary = Decimal(employee.salary or 0)
     per_day_salary = base_salary / Decimal(30)
     per_hour_salary = per_day_salary / Decimal(8)
 
-    # 🔹 Initialize trackers
     total_extra_hours = Decimal(0)
     total_late_hours = Decimal(0)
     early_extra_hours = Decimal(0)
@@ -41,18 +42,18 @@ def calculate_salary(employee, month, year):
     late_deduction = Decimal(0)
     leave_deduction = Decimal(0)
 
+    shift = getattr(getattr(employee, "shift_assignment", None), "shift", None)
+
     # 🔹 Attendance processing
     for att in attendances:
         if att.extra_hours:
             total_extra_hours += Decimal(att.extra_hours)
 
-        if not hasattr(employee, "shift_assignment"):
-            continue
+        if shift and att.check_in:
+            shift_start = timezone.make_aware(
+                datetime.combine(att.date, shift.start_time)
+            )
 
-        shift = employee.shift_assignment.shift
-        shift_start = datetime.combine(att.date, shift.start_time)
-
-        if att.check_in:
             diff = Decimal((att.check_in - shift_start).total_seconds() / 3600)
 
             if diff > 0:
@@ -60,27 +61,22 @@ def calculate_salary(employee, month, year):
             else:
                 early_extra_hours += abs(diff)
 
-    # 🔹 Adjust late with early extra
+    # 🔹 Late adjustment
     adjusted_late = max(Decimal(0), total_late_hours - early_extra_hours)
 
-    # 🔻 Late deduction (FIXED ✅)
     if adjusted_late >= 4:
         late_deduction = per_day_salary
     elif adjusted_late >= 2:
         late_deduction = per_day_salary / Decimal(2)
 
-    # 🔻 Permission deduction
-    total_permission = permissions.aggregate(
-        total=Sum('duration')
-    )['total'] or 0
-
+    # 🔹 Permission deduction
+    total_permission = permissions.aggregate(total=Sum('duration'))['total'] or 0
     total_permission = Decimal(total_permission)
 
     if total_permission > 2:
-        extra_hours = total_permission - Decimal(2)
-        permission_deduction = extra_hours * per_hour_salary
+        permission_deduction = (total_permission - Decimal(2)) * per_hour_salary
 
-    # 🔻 Leave deduction (multi-day safe)
+    # 🔹 Leave deduction
     total_leave_days = 0
     for leave in leaves:
         total_leave_days += (leave.end_date - leave.start_date).days + 1
@@ -88,10 +84,9 @@ def calculate_salary(employee, month, year):
     if total_leave_days > 1:
         leave_deduction = Decimal(total_leave_days - 1) * per_day_salary
 
-    # 🔹 Overtime
+    # 🔹 OT
     overtime_amount = total_extra_hours * per_hour_salary
 
-    # 🔹 Final calculations
     total_deduction = permission_deduction + late_deduction + leave_deduction
     final_salary = base_salary - total_deduction + overtime_amount
 

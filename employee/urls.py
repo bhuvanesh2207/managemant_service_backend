@@ -12,12 +12,12 @@ urlpatterns = [
 
     path('profile/', EmployeeProfileView.as_view(), name='employee-profile'),
 
-    path('add/', views.add_employee),
-    path('list/', views.list_employees),
-    path('me/', views.get_my_employee),
-    path('<int:employee_id>/', views.get_employee),
-    path('update/<int:employee_id>/', views.update_employee),
-    path('delete/<int:employee_id>/', views.delete_employee),
+    path('add/', views.add_employee, name='employee-add'),
+    path('list/', views.list_employees, name='employee-list'),
+    path('me/', views.get_my_employee, name='employee-me'),
+    path('<int:employee_id>/', views.get_employee, name='employee-detail'),
+    path('update/<int:employee_id>/', views.update_employee, name='employee-update'),
+    path('delete/<int:employee_id>/', views.delete_employee, name='employee-delete'), 
 
     re_path(r'^media/(?P<file_path>.+)$', views.serve_employee_file, name='serve_employee_file'),
 ]

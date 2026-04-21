@@ -35,15 +35,15 @@ urlpatterns = [
     path('ot-requests/<int:ot_id>/review/',       views.ot_request_review,       name='ot_request_review'),
     path('ot-requests/<int:ot_id>/update/',       views.ot_request_admin_update, name='ot_request_admin_update'),
 
-    # ── Employee Permissions ──────────────────────────────────────────────
-    path('employee-permissions/',                              views.emp_permission_list,     name='emp_permission_list'),
-    path('employee-permissions/request/',                      views.emp_permission_request,  name='emp_permission_request'),
-    path('employee-permissions/active/',                       views.emp_permission_active,   name='emp_permission_active'),
-    path('employee-permissions/<int:permission_id>/',          views.emp_permission_detail,   name='emp_permission_detail'),
-    path('employee-permissions/<int:permission_id>/review/',   views.emp_permission_review,   name='emp_permission_review'),
-    path('employee-permissions/<int:permission_id>/start/',    views.emp_permission_start,    name='emp_permission_start'),
-    path('employee-permissions/<int:permission_id>/complete/', views.emp_permission_complete, name='emp_permission_complete'),
-    path('employee-permissions/<int:permission_id>/cancel/',   views.emp_permission_cancel,   name='emp_permission_cancel'),
+    # ── Permissions (Clean URLs) ──────────────────────────────────────────
+    path('permissions/',                              views.emp_permission_list,     name='permission_list'),
+    path('permissions/request/',                      views.emp_permission_request,  name='permission_request'),
+    path('permissions/active/',                       views.emp_permission_active,   name='permission_active'),
+    path('permissions/<int:permission_id>/',          views.emp_permission_detail,   name='permission_detail'),
+    path('permissions/<int:permission_id>/review/',   views.emp_permission_review,   name='permission_review'),
+    path('permissions/<int:permission_id>/start/',    views.emp_permission_start,    name='permission_start'),
+    path('permissions/<int:permission_id>/complete/', views.emp_permission_complete, name='permission_complete'),
+    path('permissions/<int:permission_id>/cancel/',   views.emp_permission_cancel,   name='permission_cancel'),
 
     # ── Leave Management ──────────────────────────────────────────────────
     path('leaves/request/',                views.leave_request, name='leave_request'),

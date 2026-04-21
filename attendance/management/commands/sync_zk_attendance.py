@@ -1,7 +1,9 @@
 # attendance/management/commands/sync_zk_attendance.py
 
 import logging
+import random
 from datetime import datetime, time
+from calendar import monthrange
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -12,156 +14,146 @@ from attendance.views import calculate_extra_hours, MIN_OT_MINUTES
 
 logger = logging.getLogger(__name__)
 
-# ─────────────────────────────────────────────────────────────
-# HARDCODED TEST DATA
-# ─────────────────────────────────────────────────────────────
-TEST_RECORDS = [
-    {
-        'employee_id': '1',
-        'check_in':  time(9, 0),
-        'check_out': time(20, 0),
-    },
-]
-
 
 class Command(BaseCommand):
-    help = 'Sync hardcoded test attendance records and auto-generate OT'
+    help = "Generate attendance for a full month + OT"
+
+    def add_arguments(self, parser):
+        parser.add_argument('--employee_id', type=str, help='Employee ID (optional)')
+        parser.add_argument('--month', type=int, required=True)
+        parser.add_argument('--year', type=int, required=True)
 
     def handle(self, *args, **options):
 
-        today = timezone.now().date()
+        employee_id = options.get('employee_id')
+        month = options['month']
+        year = options['year']
 
-        logs_created  = 0
-        daily_updated = 0
-        skipped       = 0
+        # 🔹 Select employees
+        employees = Employee.objects.filter(status='active')
 
-        # ═════════════════════════════════════════════════════
-        # STEP 1 — Save DailyAttendance
-        # ═════════════════════════════════════════════════════
-        self.stdout.write("\n── STEP 1: Syncing Attendance ──────────────────")
+        if employee_id:
+            employees = employees.filter(employee_id=employee_id)
 
-        for entry in TEST_RECORDS:
+        if not employees.exists():
+            self.stdout.write(self.style.ERROR("❌ No employees found"))
+            return
 
-            try:
-                employee = Employee.objects.get(employee_id=entry['employee_id'])
-            except Employee.DoesNotExist:
-                self.stdout.write(self.style.ERROR(
-                    f"❌ Employee '{entry['employee_id']}' not found"
-                ))
-                skipped += 1
-                continue
+        total_days = monthrange(year, month)[1]
 
-            check_in  = timezone.make_aware(datetime.combine(today, entry['check_in']))
-            check_out = timezone.make_aware(datetime.combine(today, entry['check_out']))
-
-            _, ci_created = AttendanceLog.objects.get_or_create(
-                employee=employee,
-                timestamp=check_in,
-                defaults={'device_user_id': str(employee.employee_id), 'status': 0}
-            )
-            _, co_created = AttendanceLog.objects.get_or_create(
-                employee=employee,
-                timestamp=check_out,
-                defaults={'device_user_id': str(employee.employee_id), 'status': 1}
-            )
-            if ci_created: logs_created += 1
-            if co_created: logs_created += 1
-
-            total_hours = round(
-                (check_out - check_in).total_seconds() / 3600, 2
-            )
-
-            if total_hours >= 8:
-                status = 'present'
-            elif total_hours >= 4:
-                status = 'half_day'
-            else:
-                status = 'absent'
-
-            shift = getattr(getattr(employee, 'shift_assignment', None), 'shift', None)
-            extra_hrs, early_mins, late_mins = calculate_extra_hours(
-                check_in, check_out, shift, today
-            )
-
-            DailyAttendance.objects.update_or_create(
-                employee=employee,
-                date=today,
-                defaults={
-                    'check_in':    check_in,
-                    'check_out':   check_out,
-                    'total_hours': total_hours,
-                    'extra_hours': extra_hrs,
-                    'status':      status,
-                }
-            )
-            daily_updated += 1
-
-            self.stdout.write(self.style.SUCCESS(
-                f"✅ Attendance saved: {employee} | "
-                f"total={total_hours}h | extra={extra_hrs}h | status={status}"
-            ))
-
-        self.stdout.write(self.style.SUCCESS(
-            f"\nSync complete — logs: {logs_created}, "
-            f"attendance: {daily_updated}, skipped: {skipped}"
-        ))
-
-        # ═════════════════════════════════════════════════════
-        # STEP 2 — Auto-generate OvertimeRecords
-        # ═════════════════════════════════════════════════════
-        self.stdout.write("\n── STEP 2: Auto-generating OT Records ──────────")
-
+        logs_created = 0
+        attendance_created = 0
         ot_created = 0
-        ot_skipped = 0
 
-        for att in DailyAttendance.objects.filter(date=today).select_related(
-            'employee', 'employee__shift_assignment__shift'
-        ):
-            # Skip if OT record already exists
-            try:
-                att.overtime
-                ot_skipped += 1
-                self.stdout.write(f"⏭ Skipped {att.employee} — OT record already exists")
-                continue
-            except OvertimeRecord.DoesNotExist:
-                pass
+        self.stdout.write(f"\n🚀 Generating attendance for {month}/{year}")
 
-            shift = getattr(getattr(att.employee, 'shift_assignment', None), 'shift', None)
-            extra_hrs, early_mins, late_mins = calculate_extra_hours(
-                att.check_in, att.check_out, shift, today
-            )
+        for employee in employees:
 
-            # Fallback to saved extra_hours if no shift
-            if not shift:
-                extra_hrs  = float(att.extra_hours or 0)
-                total_mins = int(extra_hrs * 60)
-            else:
-                total_mins = early_mins + late_mins
+            self.stdout.write(f"\n👤 Processing: {employee}")
 
-            if total_mins < MIN_OT_MINUTES:
-                self.stdout.write(
-                    f"⏭ Skipped {att.employee} — "
-                    f"only {total_mins} mins OT (min: {MIN_OT_MINUTES})"
+            for day in range(1, total_days + 1):
+
+                date = datetime(year, month, day).date()
+
+                # 🔻 Skip Sundays
+                if date.weekday() == 6:
+                    continue
+
+                # 🔹 Slight randomization (realistic)
+                check_in_time = time(9, random.randint(0, 30))
+                check_out_time = time(18, random.randint(0, 45))
+
+                check_in = timezone.make_aware(datetime.combine(date, check_in_time))
+                check_out = timezone.make_aware(datetime.combine(date, check_out_time))
+
+                # 🔹 Logs
+                _, ci_created = AttendanceLog.objects.get_or_create(
+                    employee=employee,
+                    timestamp=check_in,
+                    defaults={
+                        'device_user_id': str(employee.employee_id),
+                        'status': 0
+                    }
                 )
-                ot_skipped += 1
-                continue
 
-            OvertimeRecord.objects.create(
-                attendance  = att,
-                extra_hours = extra_hrs,
-                early_mins  = early_mins,
-                late_mins   = late_mins,
-            )
-            ot_created += 1
-            self.stdout.write(self.style.SUCCESS(
-                f"✅ OT record created: {att.employee} | "
-                f"extra={extra_hrs}h | early={early_mins}m | late={late_mins}m"
-            ))
+                _, co_created = AttendanceLog.objects.get_or_create(
+                    employee=employee,
+                    timestamp=check_out,
+                    defaults={
+                        'device_user_id': str(employee.employee_id),
+                        'status': 1
+                    }
+                )
 
+                if ci_created:
+                    logs_created += 1
+                if co_created:
+                    logs_created += 1
+
+                # 🔹 Work hours
+                total_hours = round(
+                    (check_out - check_in).total_seconds() / 3600, 2
+                )
+
+                if total_hours >= 8:
+                    status = 'present'
+                elif total_hours >= 4:
+                    status = 'half_day'
+                else:
+                    status = 'absent'
+
+                shift = getattr(
+                    getattr(employee, 'shift_assignment', None),
+                    'shift',
+                    None
+                )
+
+                extra_hrs, early_mins, late_mins = calculate_extra_hours(
+                    check_in, check_out, shift, date
+                )
+
+                # 🔹 Daily Attendance
+                att, created = DailyAttendance.objects.update_or_create(
+                    employee=employee,
+                    date=date,
+                    defaults={
+                        'check_in': check_in,
+                        'check_out': check_out,
+                        'total_hours': total_hours,
+                        'extra_hours': extra_hrs,
+                        'status': status,
+                    }
+                )
+
+                if created:
+                    attendance_created += 1
+
+                # 🔹 OT Generation
+                if hasattr(att, 'overtime'):
+                    continue
+
+                if shift:
+                    total_mins = early_mins + late_mins
+                else:
+                    total_mins = int((extra_hrs or 0) * 60)
+
+                if total_mins < MIN_OT_MINUTES:
+                    continue
+
+                OvertimeRecord.objects.create(
+                    attendance=att,
+                    extra_hours=extra_hrs,
+                    early_mins=early_mins,
+                    late_mins=late_mins,
+                )
+
+                ot_created += 1
+
+                self.stdout.write(
+                    f"✅ {date} | {status} | {total_hours}h | OT: {extra_hrs}h"
+                )
+
+        self.stdout.write(self.style.SUCCESS("\n🎉 DONE"))
         self.stdout.write(self.style.SUCCESS(
-            f"\nOT generation complete — created: {ot_created}, skipped: {ot_skipped}"
-        ))
-
-        self.stdout.write(self.style.SUCCESS(
-            "\n✅ All done! Attendance synced and OT records generated.\n"
+            f"Logs: {logs_created}, Attendance: {attendance_created}, OT: {ot_created}"
         ))

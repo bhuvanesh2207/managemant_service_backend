@@ -877,6 +877,7 @@ def emp_permission_list(request):
     year         = request.query_params.get('year')
     month        = request.query_params.get('month')
     emp_id       = request.query_params.get('employee_id')
+    emp_alias    = request.query_params.get('employee') 
     perm_stat    = request.query_params.get('status')
     perm_type    = request.query_params.get('type')
     request_type = request.query_params.get('request_type')
@@ -886,15 +887,19 @@ def emp_permission_list(request):
     if perm_stat:    qs = qs.filter(status=perm_stat.upper())
     if perm_type:    qs = qs.filter(permission_type=perm_type.upper())
     if request_type: qs = qs.filter(request_type=request_type.upper())
-    if emp_id and request.user.is_superuser:
-        qs = qs.filter(employee__id=int(emp_id))
+    
+    # 👇 UPDATE THIS SECTION - support both 'employee_id' and 'employee'
+    if request.user.is_superuser:
+        # Use employee_id if provided, otherwise check employee alias
+        employee_filter = emp_id or emp_alias
+        if employee_filter:
+            qs = qs.filter(employee__id=int(employee_filter))
 
     serializer = EmployeePermissionSerializer(qs, many=True)
     return Response(
         {"success": True, "count": qs.count(), "permissions": serializer.data},
         status=status.HTTP_200_OK,
     )
-
 
 @api_view(['GET'])
 @authentication_classes([JWTAuthenticationFromCookie])
